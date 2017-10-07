@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"math/rand"
 	"net/http"
@@ -18,6 +19,9 @@ var broadcast = make(chan Message)           // broadcast channel
 
 // Configure the upgrader
 var upgrader = websocket.Upgrader{
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
+	// EnableCompression: true,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
@@ -32,13 +36,15 @@ type Message struct {
 
 func main() {
 	// Create a simple file server
-	fs := http.FileServer(http.Dir("../public"))
-	http.Handle("/", fs)
+	// fs := http.FileServer(http.Dir("../public"))
+	// http.Handle("/", fs)
+
+	http.HandleFunc("/", serveHome)
 
 	// Configure websocket route
 	http.HandleFunc("/aep", handleWSConnections)
 
-	// Start listening for incoming chat messages
+	// Start listening for incoming messages
 	go handleWSMessages()
 
 	// Start the server on localhost port 2706 and log any errors
@@ -47,6 +53,20 @@ func main() {
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
+}
+
+func serveHome(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.Error(w, "Not found.", 404)
+		return
+	}
+
+	if r.Method != "GET" {
+		http.Error(w, "Method not allowed", 405)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	io.WriteString(w, "<html><body>Hi! I'm Raycad!</body></html>")
 }
 
 // Handle Web Socket Connection
@@ -72,7 +92,8 @@ func handleWSConnections(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("error: %v", err)
 			delete(clients, ws)
-			// break
+			// Break or return the current Goroutine
+			break
 		} else {
 			fmt.Printf("Received message: %s in GoroutineId %d, Goroutine number %d\n",
 				msg, getGID(), runtime.NumGoroutine())
