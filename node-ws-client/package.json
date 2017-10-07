@@ -1,0 +1,13 @@
+{
+    "name": "ws-client",
+    "version": "0.0.1",
+    "private": true,
+    "devDependencies": {},
+    "dependencies": {
+        "ws": ">=1.0.0"
+    },
+    "scripts": {
+        "start": "node main.js",
+        "test": "node test.js"
+    }
+}
