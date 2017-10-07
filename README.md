@@ -1,3 +1,6 @@
+A realtime distributed messaging platform<br />
+https://github.com/nsqio/nsq<br />
+
 **1. Install packages**<br />
 ```
     $ go get github.com/gorilla/websocket
@@ -16,3 +19,8 @@
     $ npm install
     $ node main.js        
 ```    
+
+**4. Get server statistics information**<br />
+```
+http://127.0.0.1:2706/stats
+``` 
