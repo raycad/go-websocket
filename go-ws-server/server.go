@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -9,9 +8,9 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
-	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/shirou/gopsutil/mem"
 )
 
 var clients = make(map[*websocket.Conn]bool) // connected clients
@@ -39,7 +38,7 @@ func main() {
 	// fs := http.FileServer(http.Dir("../public"))
 	// http.Handle("/", fs)
 
-	http.HandleFunc("/", serveHome)
+	http.HandleFunc("/stats", handleWSStats)
 
 	// Configure websocket route
 	http.HandleFunc("/aep", handleWSConnections)
@@ -55,18 +54,21 @@ func main() {
 	}
 }
 
-func serveHome(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.Error(w, "Not found.", 404)
-		return
-	}
-
+// Get server statistics information
+func handleWSStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		http.Error(w, "Method not allowed", 405)
 		return
 	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	io.WriteString(w, "<html><body>Hi! I'm Raycad!</body></html>")
+
+	v, _ := mem.VirtualMemory()
+	stats := fmt.Sprintf("Websocket clients: %d<br>Goroutines number: %d<br>"+
+		"Total VM: %v<br>Free VM:%v<br>UsedPercent VM: %v<br>",
+		len(clients), runtime.NumGoroutine(), v.Total, v.Free, v.UsedPercent)
+
+	io.WriteString(w, stats)
 }
 
 // Handle Web Socket Connection
@@ -124,20 +126,6 @@ func handleWSMessages() {
 			}
 		}
 	}
-}
-
-// Get current Goroutine Id
-func getGID() uint64 {
-	startTime := time.Now()
-	b := make([]byte, 64)
-	b = b[:runtime.Stack(b, false)]
-	b = bytes.TrimPrefix(b, []byte("goroutine "))
-	b = b[:bytes.IndexByte(b, ' ')]
-	n, _ := strconv.ParseUint(string(b), 10, 64)
-	elapsedTime := time.Since(startTime)
-	fmt.Printf("getGID took %s\n", elapsedTime)
-
-	return n
 }
 
 // Simulate long computation

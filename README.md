@@ -1,6 +1,7 @@
 **1. Install packages**<br />
 ```
     $ go get github.com/gorilla/websocket
+    $ go get github.com/shirou/gopsutil/mem
 ```
 
 **2. Run Go Websocket server**<br />
