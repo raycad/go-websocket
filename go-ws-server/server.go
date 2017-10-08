@@ -43,7 +43,8 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-var mu sync.Mutex
+// var mutex sync.Mutex
+var mutex = &sync.Mutex{}
 
 // Message -- define our message object
 type Message struct {
@@ -137,9 +138,9 @@ func handleWSConnections(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		mu.Lock()
+		mutex.Lock()
 		stats.recvMsgCount++
-		mu.Unlock()
+		mutex.Unlock()
 
 		fmt.Printf("Received message: %s in GoroutineId %d, Goroutine number %d\n",
 			msg, getGID(), runtime.NumGoroutine())
@@ -202,10 +203,10 @@ func parseMessage(msg Message) {
 }
 
 func calculateRecvMsg() {
-	mu.Lock()
+	mutex.Lock()
 	stats.recvMsgPrint = stats.recvMsgCount
 	stats.recvMsgCount = 0
-	mu.Unlock()
+	mutex.Unlock()
 	stats.elapsedTime = int64(time.Since(stats.startTime) / time.Second)
 	// Restart the startTime
 	stats.startTime = time.Now()
