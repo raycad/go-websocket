@@ -4,7 +4,8 @@
     "private": true,
     "devDependencies": {},
     "dependencies": {
-        "ws": ">=1.0.0"
+        "ws": ">=1.0.0",
+        "sleep": ""
     },
     "scripts": {
         "start": "node main.js",

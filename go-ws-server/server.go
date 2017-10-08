@@ -8,13 +8,30 @@ import (
 	"net/http"
 	"runtime"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/shirou/gopsutil/mem"
 )
 
-var clients = make(map[*websocket.Conn]bool) // connected clients
-var broadcast = make(chan Message)           // broadcast channel
+// MaxGoroutines -- define the max goroutines number
+const MaxGoroutines int64 = 1e4
+
+// RecvMsgTimer -- timer interval for counting received messages (in second)
+const RecvMsgTimer int = 10
+
+// GoRoutinesPool -- goroutines pool
+var GoRoutinesPool = make(chan struct{}, MaxGoroutines)
+
+// Connected clients
+var clients = make(map[*websocket.Conn]bool)
+
+// Broadcast channel
+var broadcast = make(chan Message)
+
+// TestBroadcastMsg -- for testing broadcasting messages to clients
+const TestBroadcastMsg bool = false
 
 // Configure the upgrader
 var upgrader = websocket.Upgrader{
@@ -26,12 +43,24 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// Message Define our message object
+var mu sync.Mutex
+
+// Message -- define our message object
 type Message struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Result   string `json:"result"`
 }
+
+// Stats -- Server statistics information
+type Stats struct {
+	recvMsgPrint int // Received messages printed in an interval time
+	recvMsgCount int // Received messages in an interval time
+	elapsedTime  int64
+	startTime    time.Time
+}
+
+var stats Stats
 
 func main() {
 	// Create a simple file server
@@ -43,8 +72,13 @@ func main() {
 	// Configure websocket route
 	http.HandleFunc("/aep", handleWSConnections)
 
-	// Start listening for incoming messages
-	go handleWSMessages()
+	if TestBroadcastMsg == true {
+		// Start listening for incoming messages
+		go handleWSMessages()
+	}
+
+	// Execute server statistics
+	go handleServerStats()
 
 	// Start the server on localhost port 2706 and log any errors
 	log.Println("http server started on :2706")
@@ -64,9 +98,14 @@ func handleWSStats(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	v, _ := mem.VirtualMemory()
+
+	calculateRecvMsg()
+
 	stats := fmt.Sprintf("Websocket clients: %d<br>Goroutines number: %d<br>"+
+		"Received messages in %d seconds: %d<br>"+
 		"Total VM: %v<br>Free VM:%v<br>UsedPercent VM: %v<br>",
-		len(clients), runtime.NumGoroutine(), v.Total, v.Free, v.UsedPercent)
+		len(clients), runtime.NumGoroutine(), stats.elapsedTime,
+		stats.recvMsgPrint, v.Total, v.Free, v.UsedPercent)
 
 	io.WriteString(w, stats)
 }
@@ -95,17 +134,22 @@ func handleWSConnections(w http.ResponseWriter, r *http.Request) {
 			log.Printf("error: %v", err)
 			delete(clients, ws)
 			// Break or return the current Goroutine
-			break
-		} else {
-			fmt.Printf("Received message: %s in GoroutineId %d, Goroutine number %d\n",
-				msg, getGID(), runtime.NumGoroutine())
+			return
 		}
 
-		// Update message
-		msg.Result = strconv.Itoa(heavyComputation())
+		mu.Lock()
+		stats.recvMsgCount++
+		mu.Unlock()
 
-		// Send the newly received message to the broadcast channel
-		broadcast <- msg
+		fmt.Printf("Received message: %s in GoroutineId %d, Goroutine number %d\n",
+			msg, getGID(), runtime.NumGoroutine())
+
+		// Would block if GoRoutinesPool channel is already filled
+		GoRoutinesPool <- struct{}{}
+
+		go parseMessage(msg)
+
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -142,4 +186,36 @@ func heavyComputation() int {
 	}
 
 	return result
+}
+
+func parseMessage(msg Message) {
+	// Update message
+	msg.Result = strconv.Itoa(heavyComputation())
+
+	if TestBroadcastMsg == true {
+		// Send the newly received message to the broadcast channel
+		broadcast <- msg
+	}
+
+	// Update pool
+	<-GoRoutinesPool
+}
+
+func calculateRecvMsg() {
+	mu.Lock()
+	stats.recvMsgPrint = stats.recvMsgCount
+	stats.recvMsgCount = 0
+	mu.Unlock()
+	stats.elapsedTime = int64(time.Since(stats.startTime) / time.Second)
+	// Restart the startTime
+	stats.startTime = time.Now()
+}
+
+func handleServerStats() {
+	for {
+		time.Sleep(time.Duration(RecvMsgTimer) * time.Second)
+		calculateRecvMsg()
+		fmt.Printf("handleServerStats in GoroutineId %d. Received %d messages"+
+			" in %d seconds\n", getGID(), stats.recvMsgPrint, stats.elapsedTime)
+	}
 }
